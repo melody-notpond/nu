@@ -1,4 +1,4 @@
-use std::{io::{self, Error}, time::Duration, collections::VecDeque};
+use std::{io::{self, Error}, time::Duration};
 
 use crossterm::{execute, terminal::{EnterAlternateScreen, LeaveAlternateScreen, self}, event::{EnableMouseCapture, DisableMouseCapture, KeyCode}, cursor::{SetCursorShape, CursorShape}};
 use tui::{backend::CrosstermBackend, Terminal, widgets, layout, text::{Span, Spans}};
@@ -22,7 +22,7 @@ fn main() -> Result<(), Error> {
     let mut running = true;
     let mut mode = Mode::Normal;
     let mut editor_command = String::new();
-    let mut buffer = (String::new(), String::new()); // TODO: move this to daemon
+    let mut buffer = (vec![(String::new(), String::new())], vec![]); // TODO: move this to daemon
 
     while running {
         if let Ok(true) = crossterm::event::poll(Duration::from_millis(10)) {
@@ -58,15 +58,27 @@ fn main() -> Result<(), Error> {
                                     }
 
                                     KeyCode::Char('h') => {
-                                        if let Some(c) = buffer.0.pop() {
-                                            buffer.1.insert(0, c);
+                                        if let Some(c) = buffer.0.last_mut().unwrap().0.pop() {
+                                            buffer.0.last_mut().unwrap().1.insert(0, c);
+                                        }
+                                    }
+
+                                    KeyCode::Char('j') => {
+                                        if !buffer.1.is_empty() {
+                                            buffer.0.push(buffer.1.remove(1));
+                                        }
+                                    }
+
+                                    KeyCode::Char('k') => {
+                                        if buffer.0.len() > 1 {
+                                            buffer.1.push(buffer.0.pop().unwrap());
                                         }
                                     }
 
                                     KeyCode::Char('l') => {
-                                        if !buffer.1.is_empty() {
-                                            let c = buffer.1.remove(0);
-                                            buffer.0.push(c);
+                                        if !buffer.0.last().unwrap().1.is_empty() {
+                                            let c = buffer.0.last_mut().unwrap().1.remove(0);
+                                            buffer.0.last_mut().unwrap().0.push(c);
                                         }
                                     }
 
@@ -124,7 +136,13 @@ fn main() -> Result<(), Error> {
                             Mode::Insert => {
                                 match key.code {
                                     KeyCode::Backspace => (),
-                                    KeyCode::Enter => (),
+
+                                    KeyCode::Enter => {
+                                        let mut s = String::new();
+                                        std::mem::swap(&mut s, &mut buffer.0.last_mut().unwrap().1);
+                                        buffer.0.push((String::new(), s));
+                                    }
+
                                     KeyCode::Left => (),
                                     KeyCode::Right => (),
                                     KeyCode::Up => (),
@@ -140,7 +158,7 @@ fn main() -> Result<(), Error> {
                                     KeyCode::F(_) => (),
 
                                     KeyCode::Char(c) => {
-                                        buffer.0.push(c);
+                                        buffer.0.last_mut().unwrap().0.push(c);
                                     }
 
                                     KeyCode::Null => (),
@@ -182,7 +200,7 @@ fn main() -> Result<(), Error> {
                 ])
                 .split(vertical[0]);
 
-            let text_field = widgets::Paragraph::new(vec![Spans::from(vec![Span::raw(&buffer.0), Span::raw(&buffer.1)])])
+            let text_field = widgets::Paragraph::new(buffer.0.iter().map(|(a, b)| Spans::from(vec![Span::raw(a), Span::raw(b)])).chain(buffer.1.iter().map(|(a, b)| Spans::from(vec![Span::raw(a), Span::raw(b)]))).collect::<Vec<_>>())
                 .alignment(layout::Alignment::Left);
             f.render_widget(text_field, horizontal[2]);
 
@@ -206,10 +224,10 @@ fn main() -> Result<(), Error> {
 
             if let Mode::Insert = mode {
                 execute!(stdout, SetCursorShape(CursorShape::Line)).expect("could not set cursor shape");
-                f.set_cursor(horizontal[2].x + buffer.0.len() as u16, horizontal[2].y);
+                f.set_cursor(horizontal[2].x + buffer.0.last().unwrap().0.len() as u16, horizontal[2].y + buffer.0.len() as u16 - 1);
             } else if let Mode::Normal = mode {
                 execute!(stdout, SetCursorShape(CursorShape::Block)).expect("could not set cursor shape");
-                f.set_cursor(horizontal[2].x + buffer.0.len() as u16, horizontal[2].y);
+                f.set_cursor(horizontal[2].x + buffer.0.last().unwrap().0.len() as u16, horizontal[2].y + buffer.0.len() as u16 - 1);
             }
         })?;
     }
