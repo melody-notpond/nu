@@ -60,6 +60,8 @@ fn main() -> Result<(), Error> {
                                     KeyCode::Char('h') => {
                                         if let Some(c) = buffer.0.last_mut().unwrap().0.pop() {
                                             buffer.0.last_mut().unwrap().1.insert(0, c);
+                                        } else if buffer.0.len() > 1 {
+                                            buffer.1.insert(0, buffer.0.pop().unwrap());
                                         }
                                     }
 
@@ -79,6 +81,8 @@ fn main() -> Result<(), Error> {
                                         if !buffer.0.last().unwrap().1.is_empty() {
                                             let c = buffer.0.last_mut().unwrap().1.remove(0);
                                             buffer.0.last_mut().unwrap().0.push(c);
+                                        } else if !buffer.1.is_empty() {
+                                            buffer.0.push(buffer.1.remove(0));
                                         }
                                     }
 
