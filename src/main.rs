@@ -22,7 +22,7 @@ fn main() -> Result<(), Error> {
     let mut running = true;
     let mut mode = Mode::Normal;
     let mut editor_command = String::new();
-    let mut buffer = String::new(); // TODO: move this to daemon
+    let mut buffer = (String::new(), String::new()); // TODO: move this to daemon
 
     while running {
         if let Ok(true) = crossterm::event::poll(Duration::from_millis(10)) {
@@ -55,6 +55,19 @@ fn main() -> Result<(), Error> {
 
                                     KeyCode::Char('i') => {
                                         mode = Mode::Insert;
+                                    }
+
+                                    KeyCode::Char('h') => {
+                                        if let Some(c) = buffer.0.pop() {
+                                            buffer.1.insert(0, c);
+                                        }
+                                    }
+
+                                    KeyCode::Char('l') => {
+                                        if !buffer.1.is_empty() {
+                                            let c = buffer.1.remove(0);
+                                            buffer.0.push(c);
+                                        }
                                     }
 
                                     KeyCode::Char(_) => (),
@@ -127,7 +140,7 @@ fn main() -> Result<(), Error> {
                                     KeyCode::F(_) => (),
 
                                     KeyCode::Char(c) => {
-                                        buffer.push(c);
+                                        buffer.0.push(c);
                                     }
 
                                     KeyCode::Null => (),
@@ -169,7 +182,7 @@ fn main() -> Result<(), Error> {
                 ])
                 .split(vertical[0]);
 
-            let text_field = widgets::Paragraph::new(vec![Spans::from(vec![Span::raw(&buffer)])])
+            let text_field = widgets::Paragraph::new(vec![Spans::from(vec![Span::raw(&buffer.0), Span::raw(&buffer.1)])])
                 .alignment(layout::Alignment::Left);
             f.render_widget(text_field, horizontal[2]);
 
@@ -193,7 +206,10 @@ fn main() -> Result<(), Error> {
 
             if let Mode::Insert = mode {
                 execute!(stdout, SetCursorShape(CursorShape::Line)).expect("could not set cursor shape");
-                f.set_cursor(horizontal[2].x + buffer.len() as u16, horizontal[2].y);
+                f.set_cursor(horizontal[2].x + buffer.0.len() as u16, horizontal[2].y);
+            } else if let Mode::Normal = mode {
+                execute!(stdout, SetCursorShape(CursorShape::Block)).expect("could not set cursor shape");
+                f.set_cursor(horizontal[2].x + buffer.0.len() as u16, horizontal[2].y);
             }
         })?;
     }
@@ -203,7 +219,7 @@ fn main() -> Result<(), Error> {
     execute!(
         terminal.backend_mut(),
         LeaveAlternateScreen,
-        DisableMouseCapture
+        DisableMouseCapture,
     )?;
     terminal.show_cursor()?;
 
