@@ -7,7 +7,6 @@ enum Mode {
     Normal,
     Command,
     Insert,
-    Replace
 }
 
 fn main() -> Result<(), Error> {
@@ -23,6 +22,9 @@ fn main() -> Result<(), Error> {
     let mut mode = Mode::Normal;
     let mut editor_command = String::new();
     let mut buffer = (vec![(String::new(), String::new())], vec![]); // TODO: move this to daemon
+    let mut vscroll = 0;
+    let mut update_vscroll = false;
+    //let mut hscroll = 0;
 
     while running {
         if let Ok(true) = crossterm::event::poll(Duration::from_millis(10)) {
@@ -62,18 +64,21 @@ fn main() -> Result<(), Error> {
                                             buffer.0.last_mut().unwrap().1.insert(0, c);
                                         } else if buffer.0.len() > 1 {
                                             buffer.1.insert(0, buffer.0.pop().unwrap());
+                                            update_vscroll = true;
                                         }
                                     }
 
                                     KeyCode::Char('j') => {
                                         if !buffer.1.is_empty() {
                                             buffer.0.push(buffer.1.remove(0));
+                                            update_vscroll = true;
                                         }
                                     }
 
                                     KeyCode::Char('k') => {
                                         if buffer.0.len() > 1 {
                                             buffer.1.insert(0, buffer.0.pop().unwrap());
+                                            update_vscroll = true;
                                         }
                                     }
 
@@ -83,6 +88,7 @@ fn main() -> Result<(), Error> {
                                             buffer.0.last_mut().unwrap().0.push(c);
                                         } else if !buffer.1.is_empty() {
                                             buffer.0.push(buffer.1.remove(0));
+                                            update_vscroll = true;
                                         }
                                     }
 
@@ -143,6 +149,7 @@ fn main() -> Result<(), Error> {
                                         if buffer.0.last_mut().unwrap().0.pop().is_none() && buffer.0.len() > 1 {
                                             let last = buffer.0.pop().unwrap();
                                             buffer.0.last_mut().unwrap().1.push_str(&last.1);
+                                            update_vscroll = true;
                                         }
                                     }
 
@@ -150,6 +157,7 @@ fn main() -> Result<(), Error> {
                                         let mut s = String::new();
                                         std::mem::swap(&mut s, &mut buffer.0.last_mut().unwrap().1);
                                         buffer.0.push((String::new(), s));
+                                        update_vscroll = true;
                                     }
 
                                     KeyCode::Left => (),
@@ -177,8 +185,6 @@ fn main() -> Result<(), Error> {
                                     }
                                 }
                             }
-
-                            Mode::Replace => (),
                         }
                     }
 
@@ -209,13 +215,23 @@ fn main() -> Result<(), Error> {
                 ])
                 .split(vertical[0]);
 
-            let text_field = widgets::Paragraph::new(buffer.0.iter().map(|(a, b)| Spans::from(vec![Span::raw(a), Span::raw(b)])).chain(buffer.1.iter().map(|(a, b)| Spans::from(vec![Span::raw(a), Span::raw(b)]))).collect::<Vec<_>>())
+            if update_vscroll {
+                update_vscroll = false;
+
+                if buffer.0.len() as isize - (vscroll as isize) > horizontal[2].height as isize {
+                    vscroll = buffer.0.len() - horizontal[2].height as usize;
+                } else if buffer.0.len() as isize - (vscroll as isize) <= 0 {
+                    vscroll = buffer.0.len() - 1;
+                }
+            }
+
+            let text_field = widgets::Paragraph::new(buffer.0.iter().map(|(a, b)| Spans::from(vec![Span::raw(a), Span::raw(b)])).chain(buffer.1.iter().map(|(a, b)| Spans::from(vec![Span::raw(a), Span::raw(b)]))).skip(vscroll).collect::<Vec<_>>())
                 .alignment(layout::Alignment::Left);
             f.render_widget(text_field, horizontal[2]);
 
             let line_numbers = widgets::Block::default()
                 .borders(widgets::Borders::RIGHT);
-            let line_numbers = widgets::Paragraph::new(vec![Spans::from(vec![Span::raw("1")]), Spans::from(vec![Span::raw("2")]), Spans::from(vec![Span::raw("3")]), Spans::from(vec![Span::raw("4")])])
+            let line_numbers = widgets::Paragraph::new((vscroll + 1..vscroll + horizontal[0].height as usize + 1).map(|v| Spans::from(vec![Span::raw(format!("{}", v))])).collect::<Vec<_>>())
                 .block(line_numbers)
                 .alignment(layout::Alignment::Right);
             f.render_widget(line_numbers, horizontal[0]);
@@ -233,10 +249,10 @@ fn main() -> Result<(), Error> {
 
             if let Mode::Insert = mode {
                 execute!(stdout, SetCursorShape(CursorShape::Line)).expect("could not set cursor shape");
-                f.set_cursor(horizontal[2].x + buffer.0.last().unwrap().0.len() as u16, horizontal[2].y + buffer.0.len() as u16 - 1);
+                f.set_cursor(horizontal[2].x + buffer.0.last().unwrap().0.len() as u16, (horizontal[2].y as usize + buffer.0.len() - vscroll - 1) as u16);
             } else if let Mode::Normal = mode {
                 execute!(stdout, SetCursorShape(CursorShape::Block)).expect("could not set cursor shape");
-                f.set_cursor(horizontal[2].x + buffer.0.last().unwrap().0.len() as u16, horizontal[2].y + buffer.0.len() as u16 - 1);
+                f.set_cursor(horizontal[2].x + buffer.0.last().unwrap().0.len() as u16, (horizontal[2].y as usize + buffer.0.len() - vscroll - 1) as u16);
             }
         })?;
     }
