@@ -65,13 +65,13 @@ fn main() -> Result<(), Error> {
 
                                     KeyCode::Char('j') => {
                                         if !buffer.1.is_empty() {
-                                            buffer.0.push(buffer.1.remove(1));
+                                            buffer.0.push(buffer.1.remove(0));
                                         }
                                     }
 
                                     KeyCode::Char('k') => {
                                         if buffer.0.len() > 1 {
-                                            buffer.1.push(buffer.0.pop().unwrap());
+                                            buffer.1.insert(0, buffer.0.pop().unwrap());
                                         }
                                     }
 
@@ -135,7 +135,12 @@ fn main() -> Result<(), Error> {
 
                             Mode::Insert => {
                                 match key.code {
-                                    KeyCode::Backspace => (),
+                                    KeyCode::Backspace => {
+                                        if buffer.0.last_mut().unwrap().0.pop().is_none() && buffer.0.len() > 1 {
+                                            let last = buffer.0.pop().unwrap();
+                                            buffer.0.last_mut().unwrap().1.push_str(&last.1);
+                                        }
+                                    }
 
                                     KeyCode::Enter => {
                                         let mut s = String::new();
