@@ -1,6 +1,6 @@
-use std::{io::{self, Error}, time::Duration};
+use std::{io::{self, Error}, time::Duration, collections::VecDeque};
 
-use crossterm::{execute, terminal::{EnterAlternateScreen, LeaveAlternateScreen, self}, event::{EnableMouseCapture, DisableMouseCapture, KeyCode}};
+use crossterm::{execute, terminal::{EnterAlternateScreen, LeaveAlternateScreen, self}, event::{EnableMouseCapture, DisableMouseCapture, KeyCode}, cursor::{SetCursorShape, CursorShape}};
 use tui::{backend::CrosstermBackend, Terminal, widgets, layout, text::{Span, Spans}};
 
 enum Mode {
@@ -14,6 +14,7 @@ fn main() -> Result<(), Error> {
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
+    let mut stdout = io::stdout();
     let mut terminal = Terminal::new(backend)?;
     crossterm::terminal::enable_raw_mode()?;
     terminal.clear()?;
@@ -21,6 +22,7 @@ fn main() -> Result<(), Error> {
     let mut running = true;
     let mut mode = Mode::Normal;
     let mut editor_command = String::new();
+    let mut buffer = String::new(); // TODO: move this to daemon
 
     while running {
         if let Ok(true) = crossterm::event::poll(Duration::from_millis(10)) {
@@ -51,6 +53,10 @@ fn main() -> Result<(), Error> {
                                         editor_command.clear();
                                     }
 
+                                    KeyCode::Char('i') => {
+                                        mode = Mode::Insert;
+                                    }
+
                                     KeyCode::Char(_) => (),
                                     KeyCode::Null => (),
                                     KeyCode::Esc => (),
@@ -60,7 +66,9 @@ fn main() -> Result<(), Error> {
                             Mode::Command => {
                                 match key.code {
                                     KeyCode::Backspace => {
-                                        editor_command.pop();
+                                        if editor_command.pop().is_none() {
+                                            mode = Mode::Normal;
+                                        }
                                     }
 
                                     KeyCode::Enter => {
@@ -100,7 +108,36 @@ fn main() -> Result<(), Error> {
                                 }
                             }
 
-                            Mode::Insert => (),
+                            Mode::Insert => {
+                                match key.code {
+                                    KeyCode::Backspace => (),
+                                    KeyCode::Enter => (),
+                                    KeyCode::Left => (),
+                                    KeyCode::Right => (),
+                                    KeyCode::Up => (),
+                                    KeyCode::Down => (),
+                                    KeyCode::Home => (),
+                                    KeyCode::End => (),
+                                    KeyCode::PageUp => (),
+                                    KeyCode::PageDown => (),
+                                    KeyCode::Tab => (),
+                                    KeyCode::BackTab => (),
+                                    KeyCode::Delete => (),
+                                    KeyCode::Insert => (),
+                                    KeyCode::F(_) => (),
+
+                                    KeyCode::Char(c) => {
+                                        buffer.push(c);
+                                    }
+
+                                    KeyCode::Null => (),
+
+                                    KeyCode::Esc => {
+                                        mode = Mode::Normal;
+                                    }
+                                }
+                            }
+
                             Mode::Replace => (),
                         }
                     }
@@ -132,7 +169,7 @@ fn main() -> Result<(), Error> {
                 ])
                 .split(vertical[0]);
 
-            let text_field = widgets::Paragraph::new(vec![Spans::from(vec![Span::raw("uwu")])])
+            let text_field = widgets::Paragraph::new(vec![Spans::from(vec![Span::raw(&buffer)])])
                 .alignment(layout::Alignment::Left);
             f.render_widget(text_field, horizontal[2]);
 
@@ -153,6 +190,11 @@ fn main() -> Result<(), Error> {
                 .alignment(layout::Alignment::Left)
                 .block(command);
             f.render_widget(command, vertical[1]);
+
+            if let Mode::Insert = mode {
+                execute!(stdout, SetCursorShape(CursorShape::Line)).expect("could not set cursor shape");
+                f.set_cursor(horizontal[2].x + buffer.len() as u16, horizontal[2].y);
+            }
         })?;
     }
 
