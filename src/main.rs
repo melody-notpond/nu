@@ -1,6 +1,6 @@
 use std::{
     io::{self, Error},
-    time::Duration,
+    time::Duration, fs,
 };
 
 use crossterm::{
@@ -39,6 +39,9 @@ fn main() -> Result<(), Error> {
     let mut update_vscroll = false;
     let mut hscroll = 0usize;
     let mut update_hscroll = false;
+    let mut buffer_name = String::from("[buffer]");
+    let mut buffer_is_file = false;
+    let mut message = None;
 
     while running {
         if let Ok(true) = crossterm::event::poll(Duration::from_millis(10)) {
@@ -122,12 +125,63 @@ fn main() -> Result<(), Error> {
 
                             KeyCode::Enter => {
                                 mode = Mode::Normal;
-                                match editor_command.as_str() {
-                                    "quit" | "q" => {
+                                let args: Vec<_> = editor_command.split_whitespace().collect();
+                                match args.first().cloned() {
+                                    Some("quit" | "q") => {
                                         running = false;
                                     }
 
-                                    _ => (),
+                                    Some("write" | "w") => {
+                                        if args.len() > 2 {
+                                            message = Some(String::from("`write` takes in at most 1 argument"))
+                                        } else {
+                                            if args.len() == 2 {
+                                                buffer_name = String::from(args[1]);
+                                                buffer_is_file = true;
+                                            }
+
+                                            if buffer_is_file {
+                                                let mut contents = String::new();
+                                                let mut first = true;
+                                                for line in buffer.0.iter() {
+                                                    if first {
+                                                        first = false;
+                                                    } else {
+                                                        contents.push('\n');
+                                                    }
+                                                    contents.push_str(&line.0);
+                                                    contents.push_str(&line.1);
+                                                }
+                                                for line in buffer.1.iter() {
+                                                    if first {
+                                                        first = false;
+                                                    } else {
+                                                        contents.push('\n');
+                                                    }
+                                                    contents.push_str(&line.0);
+                                                    contents.push_str(&line.1);
+                                                }
+
+                                                match fs::write(&buffer_name, contents) {
+                                                    Ok(_) => {
+                                                        message = Some(format!("Saved file `{}`", buffer_name));
+                                                    }
+
+                                                    Err(e) => {
+                                                        message = Some(format!("Could not save file `{}`: {}", buffer_name, e))
+                                                    }
+                                                }
+                                            } else {
+                                                message = Some(format!("Cannot save nonfile buffer `{}`", buffer_name));
+                                            }
+                                        }
+                                    }
+
+                                    Some(v) => {
+                                        message = Some(format!("`{}` is not a valid command", v));
+                                    }
+
+                                    None => (),
                                 }
                             }
 
@@ -285,12 +339,14 @@ fn main() -> Result<(), Error> {
             f.render_widget(line_numbers, horizontal[0]);
 
             let command = widgets::Block::default().borders(widgets::Borders::TOP);
-            let mut command_data = vec![Spans::from(vec![Span::raw("[buffer]")])];
+            let mut command_data = vec![Spans::from(vec![Span::raw(&buffer_name)])];
             if let Mode::Command = mode {
                 command_data.push(Spans::from(vec![
                     Span::raw(":"),
                     Span::raw(&editor_command),
                 ]));
+            } else if let Some(message) = message.as_ref() {
+                command_data.push(Spans::from(vec![Span::raw(message)]));
             }
             let command = widgets::Paragraph::new(command_data)
                 .alignment(layout::Alignment::Left)
