@@ -176,6 +176,7 @@ fn main() -> Result<(), Error> {
 
                                     KeyCode::Char(c) => {
                                         buffer.0.last_mut().unwrap().0.push(c);
+                                        update_vscroll = true;
                                     }
 
                                     KeyCode::Null => (),
@@ -209,7 +210,7 @@ fn main() -> Result<(), Error> {
             let horizontal = layout::Layout::default()
                 .direction(layout::Direction::Horizontal)
                 .constraints([
-                    layout::Constraint::Length(3),
+                    layout::Constraint::Length(1 + ((vscroll + vertical[0].height as usize + 1) as f64).log10().ceil() as u16),
                     layout::Constraint::Length(1),
                     layout::Constraint::Min(1),
                 ])
