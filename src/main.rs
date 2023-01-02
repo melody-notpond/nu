@@ -1,6 +1,7 @@
 use std::{
+    fs,
     io::{self, Error},
-    time::Duration, fs,
+    time::Duration,
 };
 
 use crossterm::{
@@ -133,7 +134,9 @@ fn main() -> Result<(), Error> {
 
                                     Some("write" | "w") => {
                                         if args.len() > 2 {
-                                            message = Some(String::from("`write` takes in at most 1 argument"))
+                                            message = Some(String::from(
+                                                "`write` takes in at most 1 argument",
+                                            ))
                                         } else {
                                             if args.len() == 2 {
                                                 buffer_name = String::from(args[1]);
@@ -164,15 +167,24 @@ fn main() -> Result<(), Error> {
 
                                                 match fs::write(&buffer_name, contents) {
                                                     Ok(_) => {
-                                                        message = Some(format!("Saved file `{}`", buffer_name));
+                                                        message = Some(format!(
+                                                            "Saved file `{}`",
+                                                            buffer_name
+                                                        ));
                                                     }
 
                                                     Err(e) => {
-                                                        message = Some(format!("Could not save file `{}`: {}", buffer_name, e))
+                                                        message = Some(format!(
+                                                            "Could not save file `{}`: {}",
+                                                            buffer_name, e
+                                                        ))
                                                     }
                                                 }
                                             } else {
-                                                message = Some(format!("Cannot save nonfile buffer `{}`", buffer_name));
+                                                message = Some(format!(
+                                                    "Cannot save nonfile buffer `{}`",
+                                                    buffer_name
+                                                ));
                                             }
                                         }
                                     }
