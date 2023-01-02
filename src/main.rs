@@ -43,6 +43,7 @@ fn main() -> Result<(), Error> {
     let mut buffer_name = String::from("[buffer]");
     let mut buffer_is_file = false;
     let mut message = None;
+    let mut modified = false;
 
     while running {
         if let Ok(true) = crossterm::event::poll(Duration::from_millis(10)) {
@@ -129,6 +130,14 @@ fn main() -> Result<(), Error> {
                                 let args: Vec<_> = editor_command.split_whitespace().collect();
                                 match args.first().cloned() {
                                     Some("quit" | "q") => {
+                                        if modified {
+                                            message = Some(format!("Cannot quit: unsaved buffer `{}`", buffer_name));
+                                        } else {
+                                            running = false;
+                                        }
+                                    }
+
+                                    Some("quit!" | "q!") => {
                                         running = false;
                                     }
 
@@ -171,6 +180,7 @@ fn main() -> Result<(), Error> {
                                                             "Saved file `{}`",
                                                             buffer_name
                                                         ));
+                                                        modified = false;
                                                     }
 
                                                     Err(e) => {
@@ -231,6 +241,7 @@ fn main() -> Result<(), Error> {
                                     buffer.0.last_mut().unwrap().1.push_str(&last.1);
                                     update_vscroll = true;
                                 }
+                                modified = true;
                             }
 
                             KeyCode::Enter => {
@@ -238,6 +249,7 @@ fn main() -> Result<(), Error> {
                                 std::mem::swap(&mut s, &mut buffer.0.last_mut().unwrap().1);
                                 buffer.0.push((String::new(), s));
                                 update_vscroll = true;
+                                modified = true;
                             }
 
                             KeyCode::Left => (),
@@ -258,6 +270,7 @@ fn main() -> Result<(), Error> {
                                 buffer.0.last_mut().unwrap().0.push(c);
                                 update_vscroll = true;
                                 update_hscroll = true;
+                                modified = true;
                             }
 
                             KeyCode::Null => (),
@@ -351,7 +364,7 @@ fn main() -> Result<(), Error> {
             f.render_widget(line_numbers, horizontal[0]);
 
             let command = widgets::Block::default().borders(widgets::Borders::TOP);
-            let mut command_data = vec![Spans::from(vec![Span::raw(&buffer_name)])];
+            let mut command_data = vec![Spans::from(vec![Span::raw(&buffer_name), if modified { Span::raw(" [+]") } else { Span::raw("") }])];
             if let Mode::Command = mode {
                 command_data.push(Spans::from(vec![
                     Span::raw(":"),
