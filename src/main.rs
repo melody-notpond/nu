@@ -131,7 +131,10 @@ fn main() -> Result<(), Error> {
                                 match args.first().cloned() {
                                     Some("quit" | "q") => {
                                         if modified {
-                                            message = Some(format!("Cannot quit: unsaved buffer `{}`", buffer_name));
+                                            message = Some(format!(
+                                                "Cannot quit: unsaved buffer `{}`",
+                                                buffer_name
+                                            ));
                                         } else {
                                             running = false;
                                         }
@@ -364,7 +367,14 @@ fn main() -> Result<(), Error> {
             f.render_widget(line_numbers, horizontal[0]);
 
             let command = widgets::Block::default().borders(widgets::Borders::TOP);
-            let mut command_data = vec![Spans::from(vec![Span::raw(&buffer_name), if modified { Span::raw(" [+]") } else { Span::raw("") }])];
+            let mut command_data = vec![Spans::from(vec![
+                Span::raw(&buffer_name),
+                if modified {
+                    Span::raw(" [+]")
+                } else {
+                    Span::raw("")
+                },
+            ])];
             if let Mode::Command = mode {
                 command_data.push(Spans::from(vec![
                     Span::raw(":"),
