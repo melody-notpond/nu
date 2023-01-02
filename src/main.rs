@@ -10,6 +10,7 @@ use crossterm::{
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use nu::buffer::Buffer;
 use tui::{
     backend::CrosstermBackend,
     layout,
@@ -35,15 +36,8 @@ fn main() -> Result<(), Error> {
     let mut running = true;
     let mut mode = Mode::Normal;
     let mut editor_command = String::new();
-    let mut buffer = (vec![(String::new(), String::new())], vec![]); // TODO: move this to daemon
-    let mut vscroll = 0usize;
-    let mut update_vscroll = false;
-    let mut hscroll = 0usize;
-    let mut update_hscroll = false;
-    let mut buffer_name = String::from("[buffer]");
-    let mut buffer_is_file = false;
+    let mut buffer = Buffer::new("[buffer]", false, "");
     let mut message = None;
-    let mut modified = false;
 
     while running {
         if let Ok(true) = crossterm::event::poll(Duration::from_millis(10)) {
@@ -77,40 +71,19 @@ fn main() -> Result<(), Error> {
                             }
 
                             KeyCode::Char('h') => {
-                                if let Some(c) = buffer.0.last_mut().unwrap().0.pop() {
-                                    buffer.0.last_mut().unwrap().1.insert(0, c);
-                                } else if buffer.0.len() > 1 {
-                                    buffer.1.insert(0, buffer.0.pop().unwrap());
-                                    update_vscroll = true;
-                                }
-
-                                update_hscroll = true;
+                                buffer.move_left();
                             }
 
                             KeyCode::Char('j') => {
-                                if !buffer.1.is_empty() {
-                                    buffer.0.push(buffer.1.remove(0));
-                                    update_vscroll = true;
-                                }
+                                buffer.move_down();
                             }
 
                             KeyCode::Char('k') => {
-                                if buffer.0.len() > 1 {
-                                    buffer.1.insert(0, buffer.0.pop().unwrap());
-                                    update_vscroll = true;
-                                }
+                                buffer.move_up();
                             }
 
                             KeyCode::Char('l') => {
-                                if !buffer.0.last().unwrap().1.is_empty() {
-                                    let c = buffer.0.last_mut().unwrap().1.remove(0);
-                                    buffer.0.last_mut().unwrap().0.push(c);
-                                } else if !buffer.1.is_empty() {
-                                    buffer.0.push(buffer.1.remove(0));
-                                    update_vscroll = true;
-                                }
-
-                                update_hscroll = true;
+                                buffer.move_right();
                             }
 
                             KeyCode::Char(_) => (),
@@ -130,10 +103,10 @@ fn main() -> Result<(), Error> {
                                 let args: Vec<_> = editor_command.split_whitespace().collect();
                                 match args.first().cloned() {
                                     Some("quit" | "q") => {
-                                        if modified {
+                                        if buffer.modified {
                                             message = Some(format!(
                                                 "Cannot quit: unsaved buffer `{}`",
-                                                buffer_name
+                                                buffer.name
                                             ));
                                         } else {
                                             running = false;
@@ -151,52 +124,31 @@ fn main() -> Result<(), Error> {
                                             ))
                                         } else {
                                             if args.len() == 2 {
-                                                buffer_name = String::from(args[1]);
-                                                buffer_is_file = true;
+                                                buffer.name = String::from(args[1]);
+                                                buffer.is_file = true;
                                             }
 
-                                            if buffer_is_file {
-                                                let mut contents = String::new();
-                                                let mut first = true;
-                                                for line in buffer.0.iter() {
-                                                    if first {
-                                                        first = false;
-                                                    } else {
-                                                        contents.push('\n');
-                                                    }
-                                                    contents.push_str(&line.0);
-                                                    contents.push_str(&line.1);
-                                                }
-                                                for line in buffer.1.iter() {
-                                                    if first {
-                                                        first = false;
-                                                    } else {
-                                                        contents.push('\n');
-                                                    }
-                                                    contents.push_str(&line.0);
-                                                    contents.push_str(&line.1);
-                                                }
-
-                                                match fs::write(&buffer_name, contents) {
+                                            if buffer.is_file {
+                                                match fs::write(&buffer.name, buffer.to_string()) {
                                                     Ok(_) => {
                                                         message = Some(format!(
                                                             "Saved file `{}`",
-                                                            buffer_name
+                                                            buffer.name
                                                         ));
-                                                        modified = false;
+                                                        buffer.modified = false;
                                                     }
 
                                                     Err(e) => {
                                                         message = Some(format!(
                                                             "Could not save file `{}`: {}",
-                                                            buffer_name, e
+                                                            buffer.name, e
                                                         ))
                                                     }
                                                 }
                                             } else {
                                                 message = Some(format!(
                                                     "Cannot save nonfile buffer `{}`",
-                                                    buffer_name
+                                                    buffer.name
                                                 ));
                                             }
                                         }
@@ -237,22 +189,11 @@ fn main() -> Result<(), Error> {
 
                         Mode::Insert => match key.code {
                             KeyCode::Backspace => {
-                                if buffer.0.last_mut().unwrap().0.pop().is_none()
-                                    && buffer.0.len() > 1
-                                {
-                                    let last = buffer.0.pop().unwrap();
-                                    buffer.0.last_mut().unwrap().1.push_str(&last.1);
-                                    update_vscroll = true;
-                                }
-                                modified = true;
+                                buffer.backspace();
                             }
 
                             KeyCode::Enter => {
-                                let mut s = String::new();
-                                std::mem::swap(&mut s, &mut buffer.0.last_mut().unwrap().1);
-                                buffer.0.push((String::new(), s));
-                                update_vscroll = true;
-                                modified = true;
+                                buffer.enter();
                             }
 
                             KeyCode::Left => (),
@@ -270,10 +211,7 @@ fn main() -> Result<(), Error> {
                             KeyCode::F(_) => (),
 
                             KeyCode::Char(c) => {
-                                buffer.0.last_mut().unwrap().0.push(c);
-                                update_vscroll = true;
-                                update_hscroll = true;
-                                modified = true;
+                                buffer.char(c)
                             }
 
                             KeyCode::Null => (),
@@ -303,7 +241,7 @@ fn main() -> Result<(), Error> {
                 .direction(layout::Direction::Horizontal)
                 .constraints([
                     layout::Constraint::Length(
-                        1 + ((vscroll + vertical[0].height as usize + 1) as f64)
+                        1 + ((buffer.vscroll + vertical[0].height as usize + 1) as f64)
                             .log10()
                             .ceil() as u16,
                     ),
@@ -312,53 +250,18 @@ fn main() -> Result<(), Error> {
                 ])
                 .split(vertical[0]);
 
-            if update_vscroll {
-                update_vscroll = false;
-
-                if buffer.0.len() as isize - (vscroll as isize) > horizontal[2].height as isize {
-                    vscroll = buffer.0.len() - horizontal[2].height as usize;
-                } else if buffer.0.len() as isize - (vscroll as isize) <= 0 {
-                    vscroll = buffer.0.len() - 1;
-                }
-            }
-
-            if update_hscroll {
-                update_hscroll = false;
-
-                let v = buffer.0.last().unwrap().0.len();
-                if v as isize - (hscroll as isize) > horizontal[2].width as isize - 1 {
-                    hscroll = v - horizontal[2].width as usize + 1;
-                } else if v as isize - (hscroll as isize) <= 0 {
-                    hscroll = v;
-                }
-            }
+            buffer.update_scrolls(horizontal[2].width as isize, horizontal[2].height as isize);
 
             let text_field = widgets::Paragraph::new(
-                buffer
-                    .0
-                    .iter()
-                    .map(|(a, b)| {
-                        if a.len() < hscroll {
-                            Spans::from(vec![Span::raw(&b[hscroll - a.len()..])])
-                        } else {
-                            Spans::from(vec![Span::raw(&a[hscroll..]), Span::raw(b)])
-                        }
-                    })
-                    .chain(
-                        buffer
-                            .1
-                            .iter()
-                            .map(|(a, b)| Spans::from(vec![Span::raw(a), Span::raw(b)])),
-                    )
-                    .skip(vscroll)
-                    .collect::<Vec<_>>(),
-            )
+                buffer.window(horizontal[2].width as usize, horizontal[2].height as usize)
+                    .map(|v| Spans::from(v.into_iter().map(Span::raw).collect::<Vec<_>>()))
+                    .collect::<Vec<_>>())
             .alignment(layout::Alignment::Left);
             f.render_widget(text_field, horizontal[2]);
 
             let line_numbers = widgets::Block::default().borders(widgets::Borders::RIGHT);
             let line_numbers = widgets::Paragraph::new(
-                (vscroll + 1..vscroll + horizontal[0].height as usize + 1)
+                (buffer.vscroll + 1..buffer.vscroll + horizontal[0].height as usize + 1)
                     .map(|v| Spans::from(vec![Span::raw(format!("{}", v))]))
                     .collect::<Vec<_>>(),
             )
@@ -368,8 +271,8 @@ fn main() -> Result<(), Error> {
 
             let command = widgets::Block::default().borders(widgets::Borders::TOP);
             let mut command_data = vec![Spans::from(vec![
-                Span::raw(&buffer_name),
-                if modified {
+                Span::raw(&buffer.name),
+                if buffer.modified {
                     Span::raw(" [+]")
                 } else {
                     Span::raw("")
@@ -391,17 +294,13 @@ fn main() -> Result<(), Error> {
             if let Mode::Insert = mode {
                 execute!(stdout, SetCursorShape(CursorShape::Line))
                     .expect("could not set cursor shape");
-                f.set_cursor(
-                    (horizontal[2].x as usize + buffer.0.last().unwrap().0.len() - hscroll) as u16,
-                    (horizontal[2].y as usize + buffer.0.len() - vscroll - 1) as u16,
-                );
+                let (x, y) = buffer.cursor_pos(horizontal[2].x as usize, horizontal[2].y as usize);
+                f.set_cursor(x as u16, y as u16);
             } else if let Mode::Normal = mode {
                 execute!(stdout, SetCursorShape(CursorShape::Block))
                     .expect("could not set cursor shape");
-                f.set_cursor(
-                    (horizontal[2].x as usize + buffer.0.last().unwrap().0.len() - hscroll) as u16,
-                    (horizontal[2].y as usize + buffer.0.len() - vscroll - 1) as u16,
-                );
+                let (x, y) = buffer.cursor_pos(horizontal[2].x as usize, horizontal[2].y as usize);
+                f.set_cursor(x as u16, y as u16);
             }
         })?;
     }
