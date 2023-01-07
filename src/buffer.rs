@@ -229,6 +229,10 @@ impl Buffer {
     pub fn cursor_pos(&self, x: usize, y: usize) -> (usize, usize) {
         (x + self.pre.last().unwrap().pre.len() - self.hscroll, y as usize + self.pre.len() - self.vscroll - 1)
     }
+
+    pub fn line_count(&self) -> usize {
+        self.pre.len() + self.post.len()
+    }
 }
 
 struct BufferLine {

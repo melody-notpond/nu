@@ -315,7 +315,7 @@ fn main() -> Result<(), Error> {
                 .direction(layout::Direction::Horizontal)
                 .constraints([
                     layout::Constraint::Length(
-                        1 + ((buffers.get_current().vscroll + vertical[0].height as usize + 1) as f64)
+                        1 + ((buffers.get_current().line_count() + 1) as f64)
                             .log10()
                             .ceil() as u16,
                     ),
@@ -336,7 +336,7 @@ fn main() -> Result<(), Error> {
 
             let line_numbers = widgets::Block::default().borders(widgets::Borders::RIGHT);
             let line_numbers = widgets::Paragraph::new(
-                (buffer.vscroll + 1..buffer.vscroll + horizontal[0].height as usize + 1)
+                (buffer.vscroll + 1..1 + buffer.line_count().min(buffer.vscroll + horizontal[0].height as usize + 1))
                     .map(|v| Spans::from(vec![Span::raw(format!("{}", v))]))
                     .collect::<Vec<_>>(),
             )
