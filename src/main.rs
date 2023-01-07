@@ -1,7 +1,7 @@
 use std::{
     fs,
     io::{self, Error},
-    time::Duration,
+    time::Duration, env,
 };
 
 use crossterm::{
@@ -36,8 +36,22 @@ fn main() -> Result<(), Error> {
     let mut running = true;
     let mut mode = Mode::Normal;
     let mut editor_command = String::new();
-    let mut buffers = Buffers::new(Buffer::new("[buffer]", false, ""));
     let mut message = None;
+
+    let args: Vec<_> = env::args().collect();
+    let buffer = if args.len() > 1 {
+        let name = &args[1];
+        match fs::read_to_string(name) {
+            Ok(v) => Buffer::new(name, true, &v),
+            Err(e) => {
+                message = Some(format!("Could not open file `{}`: {}", name, e));
+                Buffer::new("[buffer]", false, "")
+            }
+        }
+    } else {
+        Buffer::new("[buffer]", false, "")
+    };
+    let mut buffers = Buffers::new(buffer);
 
     while running {
         if let Ok(true) = crossterm::event::poll(Duration::from_millis(10)) {
