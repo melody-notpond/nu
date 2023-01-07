@@ -155,6 +155,27 @@ fn main() -> Result<(), Error> {
                                         }
                                     }
 
+                                    Some("open" | "o") => {
+                                        if args.len() != 2 {
+                                            message = Some(String::from("`open` takes in exactly 2 arguments"));
+                                        } else {
+                                            match fs::read_to_string(args[1]) {
+                                                Ok(v) => {
+                                                    let buffer = Buffer::new(args[1], true, &v);
+                                                    let id = buffers.add_buffer(buffer);
+                                                    buffers.switch(id);
+                                                }
+
+                                                Err(e) => {
+                                                    message = Some(format!(
+                                                        "Could not open file `{}`: {}",
+                                                        args[1], e
+                                                    ))
+                                                }
+                                            }
+                                        }
+                                    }
+
                                     Some("write" | "w") => {
                                         let buffer = buffers.get_current_mut();
                                         if args.len() > 2 {
