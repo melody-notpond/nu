@@ -10,7 +10,7 @@ use crossterm::{
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use nu::buffer::Buffer;
+use nu::buffer::{Buffer, Buffers};
 use tui::{
     backend::CrosstermBackend,
     layout,
@@ -36,7 +36,7 @@ fn main() -> Result<(), Error> {
     let mut running = true;
     let mut mode = Mode::Normal;
     let mut editor_command = String::new();
-    let mut buffer = Buffer::new("[buffer]", false, "");
+    let mut buffers = Buffers::new(Buffer::new("[buffer]", false, ""));
     let mut message = None;
 
     while running {
@@ -71,19 +71,27 @@ fn main() -> Result<(), Error> {
                             }
 
                             KeyCode::Char('h') => {
-                                buffer.move_left();
+                                buffers.get_current_mut().move_left();
                             }
 
                             KeyCode::Char('j') => {
-                                buffer.move_down();
+                                buffers.get_current_mut().move_down();
                             }
 
                             KeyCode::Char('k') => {
-                                buffer.move_up();
+                                buffers.get_current_mut().move_up();
                             }
 
                             KeyCode::Char('l') => {
-                                buffer.move_right();
+                                buffers.get_current_mut().move_right();
+                            }
+
+                            KeyCode::Char('[') => {
+                                buffers.prev();
+                            }
+
+                            KeyCode::Char(']') => {
+                                buffers.next();
                             }
 
                             KeyCode::Char(_) => (),
@@ -100,10 +108,11 @@ fn main() -> Result<(), Error> {
 
                             KeyCode::Enter => {
                                 mode = Mode::Normal;
+                                message = None;
                                 let args: Vec<_> = editor_command.split_whitespace().collect();
                                 match args.first().cloned() {
                                     Some("quit" | "q") => {
-                                        if buffer.modified {
+                                        if let Some(buffer) = buffers.modified() {
                                             message = Some(format!(
                                                 "Cannot quit: unsaved buffer `{}`",
                                                 buffer.name
@@ -117,7 +126,37 @@ fn main() -> Result<(), Error> {
                                         running = false;
                                     }
 
+                                    Some("close" | "c") => {
+                                        if buffers.get_current().modified {
+                                            message = Some(format!("Cannot close unsaved buffer `{}`", buffers.get_current().name));
+                                        } else {
+                                            buffers.remove_current();
+                                        }
+                                    }
+
+                                    Some("close!" | "c!") => {
+                                        buffers.remove_current();
+                                    }
+
+                                    Some("new" | "n") => {
+                                        if args.len() > 2 {
+                                            message = Some(String::from(
+                                                "`new` takes in at most 1 argument",
+                                            ))
+                                        } else {
+                                            let mut buffer = Buffer::new("[buffer]", false, "");
+                                            if args.len() == 2 {
+                                                buffer.name = String::from(args[1]);
+                                                buffer.is_file = true;
+                                            }
+
+                                            let id = buffers.add_buffer(buffer);
+                                            buffers.switch(id);
+                                        }
+                                    }
+
                                     Some("write" | "w") => {
+                                        let buffer = buffers.get_current_mut();
                                         if args.len() > 2 {
                                             message = Some(String::from(
                                                 "`write` takes in at most 1 argument",
@@ -189,11 +228,11 @@ fn main() -> Result<(), Error> {
 
                         Mode::Insert => match key.code {
                             KeyCode::Backspace => {
-                                buffer.backspace();
+                                buffers.get_current_mut().backspace();
                             }
 
                             KeyCode::Enter => {
-                                buffer.enter();
+                                buffers.get_current_mut().enter();
                             }
 
                             KeyCode::Left => (),
@@ -211,7 +250,7 @@ fn main() -> Result<(), Error> {
                             KeyCode::F(_) => (),
 
                             KeyCode::Char(c) => {
-                                buffer.char(c)
+                                buffers.get_current_mut().char(c)
                             }
 
                             KeyCode::Null => (),
@@ -241,7 +280,7 @@ fn main() -> Result<(), Error> {
                 .direction(layout::Direction::Horizontal)
                 .constraints([
                     layout::Constraint::Length(
-                        1 + ((buffer.vscroll + vertical[0].height as usize + 1) as f64)
+                        1 + ((buffers.get_current().vscroll + vertical[0].height as usize + 1) as f64)
                             .log10()
                             .ceil() as u16,
                     ),
@@ -250,7 +289,8 @@ fn main() -> Result<(), Error> {
                 ])
                 .split(vertical[0]);
 
-            buffer.update_scrolls(horizontal[2].width as isize, horizontal[2].height as isize);
+            buffers.get_current_mut().update_scrolls(horizontal[2].width as isize, horizontal[2].height as isize);
+            let buffer = buffers.get_current();
 
             let text_field = widgets::Paragraph::new(
                 buffer.window(horizontal[2].width as usize, horizontal[2].height as usize)

@@ -1,5 +1,70 @@
 use std::fmt::Display;
 
+pub struct Buffers {
+    buffers: Vec<Buffer>,
+    current_buffer: usize,
+}
+
+impl Buffers {
+    pub fn new(buffer: Buffer) -> Self {
+        Buffers {
+            buffers: vec![buffer],
+            current_buffer: 0,
+        }
+    }
+
+    pub fn add_buffer(&mut self, buffer: Buffer) -> usize {
+        let id = self.buffers.len();
+        self.buffers.push(buffer);
+        id
+    }
+
+    pub fn get_current(&self) -> &Buffer {
+        unsafe {
+            self.buffers.get_unchecked(self.current_buffer)
+        }
+    }
+
+    pub fn get_current_mut(&mut self) -> &mut Buffer {
+        unsafe {
+            self.buffers.get_unchecked_mut(self.current_buffer)
+        }
+    }
+
+    pub fn modified(&self) -> Option<&Buffer> {
+        self.buffers.iter().find(|v| v.modified)
+    }
+
+    pub fn remove_current(&mut self) {
+        self.buffers.remove(self.current_buffer);
+        if self.buffers.is_empty() {
+            self.buffers.push(Buffer::new("[buffer]", false, ""));
+        } else if self.current_buffer >= self.buffers.len() {
+            self.current_buffer = self.buffers.len() - 1;
+        }
+    }
+
+    pub fn next(&mut self) {
+        self.current_buffer += 1;
+        if self.current_buffer >= self.buffers.len() {
+            self.current_buffer = 0;
+        }
+    }
+
+    pub fn prev(&mut self) {
+        if self.current_buffer == 0 {
+            self.current_buffer = self.buffers.len();
+        }
+        self.current_buffer -= 1;
+    }
+
+    pub fn switch(&mut self, id: usize) {
+        if id < self.buffers.len() {
+            self.current_buffer = id;
+        }
+    }
+}
+
 pub struct Buffer {
     pub name: String,
     pub is_file: bool,
